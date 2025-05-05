@@ -1,3 +1,4 @@
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -13,7 +14,7 @@
     --popover: 0 0% 100%;
     --popover-foreground: 222.2 84% 4.9%;
 
-    --primary: 222.2 47.4% 11.2%;
+    --primary: 214 100% 53%;
     --primary-foreground: 210 40% 98%;
 
     --secondary: 210 40% 96.1%;
@@ -33,22 +34,6 @@
     --ring: 222.2 84% 4.9%;
 
     --radius: 0.5rem;
-
-    --sidebar-background: 0 0% 98%;
-
-    --sidebar-foreground: 240 5.3% 26.1%;
-
-    --sidebar-primary: 240 5.9% 10%;
-
-    --sidebar-primary-foreground: 0 0% 98%;
-
-    --sidebar-accent: 240 4.8% 95.9%;
-
-    --sidebar-accent-foreground: 240 5.9% 10%;
-
-    --sidebar-border: 220 13% 91%;
-
-    --sidebar-ring: 217.2 91.2% 59.8%;
   }
 
   .dark {
@@ -79,14 +64,6 @@
     --border: 217.2 32.6% 17.5%;
     --input: 217.2 32.6% 17.5%;
     --ring: 212.7 26.8% 83.9%;
-    --sidebar-background: 240 5.9% 10%;
-    --sidebar-foreground: 240 4.8% 95.9%;
-    --sidebar-primary: 224.3 76.3% 48%;
-    --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 240 3.7% 15.9%;
-    --sidebar-accent-foreground: 240 4.8% 95.9%;
-    --sidebar-border: 240 3.7% 15.9%;
-    --sidebar-ring: 217.2 91.2% 59.8%;
   }
 }
 
@@ -98,4 +75,92 @@
   body {
     @apply bg-background text-foreground;
   }
+}
+
+.data-card {
+  @apply bg-white rounded-lg shadow p-5 flex flex-col;
+}
+
+.data-card-header {
+  @apply flex justify-between items-center mb-3;
+}
+
+.data-card-title {
+  @apply font-medium text-gray-600;
+}
+
+.data-card-source {
+  @apply text-xs py-0.5 px-2 rounded bg-blue-100 text-blue-700;
+}
+
+.data-card-number {
+  @apply text-3xl font-bold mb-1;
+}
+
+.data-card-stats {
+  @apply flex items-center gap-2;
+}
+
+.data-card-trend {
+  @apply text-sm flex items-center gap-1;
+}
+
+.data-card-trend.positive {
+  @apply text-green-600;
+}
+
+.data-card-new {
+  @apply text-sm text-gray-500;
+}
+
+.sidebar-item {
+  @apply flex items-center gap-3 px-5 py-3 text-gray-600 hover:bg-mdm-sidebarHover rounded-lg transition-colors;
+}
+
+.sidebar-item.active {
+  @apply bg-mdm-sidebarActive text-mdm-primary font-medium;
+}
+
+.chat-container {
+  @apply fixed bottom-[80px] right-[30px] w-[400px] bg-white rounded-xl shadow-lg overflow-hidden z-50;
+}
+
+.chat-header {
+  @apply bg-mdm-primary text-white p-4;
+}
+
+.chat-messages {
+  @apply p-4 space-y-4 max-h-[400px] overflow-y-auto;
+}
+
+.chat-message {
+  @apply flex gap-3;
+}
+
+.chat-message.bot {
+  @apply justify-start;
+}
+
+.chat-message.user {
+  @apply justify-end;
+}
+
+.chat-bubble {
+  @apply p-3 rounded-xl max-w-[80%];
+}
+
+.chat-bubble.bot {
+  @apply bg-gray-100 text-gray-800;
+}
+
+.chat-bubble.user {
+  @apply bg-mdm-primary text-white;
+}
+
+.chat-input-container {
+  @apply p-4 border-t;
+}
+
+.chat-input {
+  @apply w-full p-3 rounded-full border border-gray-300 focus:outline-none focus:ring-2 focus:ring-mdm-primary;
 }
