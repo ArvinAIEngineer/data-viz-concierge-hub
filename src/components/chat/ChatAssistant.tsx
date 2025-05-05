@@ -15,7 +15,7 @@ interface ChatAssistantProps {
   onClose: () => void;
 }
 
-const API_BASE_URL = "http://localhost:5200";
+const API_BASE_URL = "https://bakend-24ej.onrender.com";
 
 const ChatAssistant = ({ onClose }: ChatAssistantProps) => {
   const [messages, setMessages] = useState<Message[]>([
