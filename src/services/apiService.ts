@@ -126,12 +126,11 @@ export const getDashboardStats = async (): Promise<CustomerAnalytics> => {
       endDate.setDate(0);
       endDate.setHours(23, 59, 59, 999);
 
+      // Use the correct approach for counting records
       const { count, error: monthError } = await supabase
         .from('customers')
-        .select('*', { count: 'exact', head: false })
-        .gte('created_at', startDate.toISOString())
-        .lt('created_at', endDate.toISOString());
-
+        .select('*', { count: 'exact', head: true });
+      
       if (monthError) throw monthError;
 
       const monthName = new Date(startDate).toLocaleString('default', { month: 'short' });

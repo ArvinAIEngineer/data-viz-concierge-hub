@@ -37,7 +37,7 @@ const Index = () => {
       source: "Supabase",
       count: isLoading ? "..." : analytics?.totalCustomers || 0,
       trend: isLoading ? "..." : `${analytics?.growthRate ? Math.round(analytics.growthRate) : 0}%`,
-      trendDirection: analytics?.growthRate && analytics.growthRate > 0 ? "up" : "down" as "up" | "down",
+      trendDirection: analytics?.growthRate && analytics.growthRate > 0 ? "up" : "down" as "up" | "down" | "neutral",
       newCount: isLoading ? "..." : analytics?.newCustomers || 0,
       icon: <Users className="text-blue-500" />
     },
