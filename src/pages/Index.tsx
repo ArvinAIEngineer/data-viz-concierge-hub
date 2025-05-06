@@ -14,15 +14,15 @@ const Index = () => {
   const { data: analytics, isLoading, error } = useQuery({
     queryKey: ['dashboardStats'],
     queryFn: getDashboardStats,
-    meta: {
-      onError: (err: Error) => {
-        console.error('Error fetching dashboard stats:', err);
-        toast({
-          title: "Error loading dashboard data",
-          description: "Please check your connection and try again.",
-          variant: "destructive",
-        });
-      }
+    retry: 1,
+    retryDelay: 1000,
+    onError: (err: Error) => {
+      console.error('Error fetching dashboard stats:', err);
+      toast({
+        title: "Error loading dashboard data",
+        description: "Please check your connection and try again.",
+        variant: "destructive",
+      });
     }
   });
 
@@ -122,7 +122,7 @@ const Index = () => {
             source={card.source}
             count={card.count}
             trend={card.trend}
-            trendDirection={card.trendDirection}
+            trendDirection={card.trendDirection || "neutral"}
             newCount={card.newCount}
             icon={card.icon}
             isLoading={index === 0 ? isLoading : false}

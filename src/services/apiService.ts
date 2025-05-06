@@ -1,9 +1,11 @@
+
 import { Customer, CustomerAnalytics } from "@/types/types";
 import { createClient } from '@supabase/supabase-js';
 
-// This should be configured in your project settings after connecting to Supabase
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
+// Using the provided connection string
+// Note: Exposing credentials in code is not recommended for production
+const supabaseUrl = 'https://rntkfuowrlnbtvwwbgae.supabase.co';
+const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJudGtmdW93cmxuYnR2d3diZ2FlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MTU3MjY5MDEsImV4cCI6MjAzMTMwMjkwMX0.1FQiEZ_Jn4Ly3XPCk51bZHyI9j5YPNBfE6GaNqGPe8A';
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
@@ -126,10 +128,12 @@ export const getDashboardStats = async (): Promise<CustomerAnalytics> => {
       endDate.setDate(0);
       endDate.setHours(23, 59, 59, 999);
 
-      // Use the correct approach for counting records
+      // Get the count for this month
       const { count, error: monthError } = await supabase
         .from('customers')
-        .select('*', { count: 'exact', head: true });
+        .select('*', { count: 'exact', head: true })
+        .gte('created_at', startDate.toISOString())
+        .lt('created_at', endDate.toISOString());
       
       if (monthError) throw monthError;
 
