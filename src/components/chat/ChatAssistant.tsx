@@ -1,5 +1,9 @@
+// src/components/chat/ChatAssistant.tsx
 import { useState, useRef } from "react";
 import { Send, X, Upload, User } from "lucide-react";
+import { createCustomer } from "@/services/apiService"; // Import createCustomer
+import { Customer } from "@/types/types";
+import { queryClient } from "@/App"; // Import queryClient if you implement cache invalidation
 
 interface Message {
   id: number;
@@ -15,7 +19,8 @@ interface ChatAssistantProps {
   onClose: () => void;
 }
 
-const API_BASE_URL = "https://bakend-24ej.onrender.com";
+// This API_BASE_URL is for the non-Supabase chat/upload parts.
+const API_BASE_URL_CHAT = "https://bakend-24ej.onrender.com"; 
 
 const ChatAssistant = ({ onClose }: ChatAssistantProps) => {
   const [messages, setMessages] = useState<Message[]>([
@@ -47,11 +52,9 @@ const ChatAssistant = ({ onClose }: ChatAssistantProps) => {
     
     try {
       if (uploadedFiles.length > 0) {
-        // Handle file upload
         await handleCardUpload(uploadedFiles[0]);
         setUploadedFiles([]);
       } else {
-        // Handle text message
         const response = await sendMessageToBackend(inputMessage);
         
         setMessages(prev => [...prev, {
@@ -64,7 +67,6 @@ const ChatAssistant = ({ onClose }: ChatAssistantProps) => {
           status: response.status
         }]);
         
-        // If the status indicates no customer found, show potential follow-up message
         if (response.status === "not_found" && inputMessage.toLowerCase().includes("find customer")) {
           setTimeout(() => {
             setMessages(prev => [...prev, {
@@ -106,7 +108,8 @@ const ChatAssistant = ({ onClose }: ChatAssistantProps) => {
     formData.append('card', file);
     
     try {
-      const response = await fetch(`${API_BASE_URL}/api/upload-card`, {
+      // This uses the external backend for card upload
+      const response = await fetch(`${API_BASE_URL_CHAT}/api/upload-card`, { 
         method: 'POST',
         body: formData,
       });
@@ -117,7 +120,6 @@ const ChatAssistant = ({ onClose }: ChatAssistantProps) => {
         throw new Error(data.error || "Failed to process card");
       }
       
-      // Add message with extracted information
       const responseText = data.match_status === "existing_match" 
         ? `Found matching customer in the database:\n\nName: ${data.matched_customer?.name || 'N/A'}\nCompany: ${data.matched_customer?.company || 'N/A'}\nGST: ${data.matched_customer?.gst_number || 'N/A'}\nEmail: ${data.matched_customer?.email_address || 'N/A'}`
         : `Extracted information from card:\n\nName: ${data.extracted_data?.name || 'N/A'}\nCompany: ${data.extracted_data?.company || 'N/A'}\nPhone: ${data.extracted_data?.phone_number || 'N/A'}\nEmail: ${data.extracted_data?.email_address || 'N/A'}\nGST: ${data.extracted_data?.gst_number || 'N/A'}\nPAN: ${data.extracted_data?.pan_number || 'N/A'}`;
@@ -132,7 +134,6 @@ const ChatAssistant = ({ onClose }: ChatAssistantProps) => {
         status: data.match_status
       }]);
       
-      // If no match found, suggest creating a new customer
       if (data.match_status === "new_potential") {
         setTimeout(() => {
           setMessages(prev => [...prev, {
@@ -156,7 +157,8 @@ const ChatAssistant = ({ onClose }: ChatAssistantProps) => {
 
   const sendMessageToBackend = async (message: string) => {
     try {
-      const response = await fetch(`${API_BASE_URL}/api/chat`, {
+      // This uses the external backend for chat
+      const response = await fetch(`${API_BASE_URL_CHAT}/api/chat`, { 
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -179,7 +181,6 @@ const ChatAssistant = ({ onClose }: ChatAssistantProps) => {
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
       setUploadedFiles(Array.from(e.target.files));
-      // Auto-submit when file is selected
       setTimeout(() => {
         handleSendMessage();
       }, 100);
@@ -303,14 +304,17 @@ interface CustomerOnboardingFormProps {
   prefillData?: any;
 }
 
+type NewCustomerFormData = Omit<Customer, 'id' | 'created_at'>;
+
+
 const CustomerOnboardingForm = ({ onCancel, prefillData }: CustomerOnboardingFormProps) => {
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<NewCustomerFormData>({
     name: prefillData?.name || "",
     company: prefillData?.company || "",
     gst_number: prefillData?.gst_number || "",
     pan_number: prefillData?.pan_number || "",
     address: prefillData?.address || "",
-    contact_person: prefillData?.name || "",
+    contact_person: prefillData?.contact_person || prefillData?.name || "",
     email_address: prefillData?.email_address || "",
     phone_number: prefillData?.phone_number || "",
   });
@@ -325,7 +329,6 @@ const CustomerOnboardingForm = ({ onCancel, prefillData }: CustomerOnboardingFor
       [name]: value
     }));
     
-    // Clear error when field is edited
     if (errors[name]) {
       setErrors(prev => ({
         ...prev,
@@ -337,8 +340,7 @@ const CustomerOnboardingForm = ({ onCancel, prefillData }: CustomerOnboardingFor
   const validateForm = () => {
     const newErrors: Record<string, string> = {};
     
-    // Required fields
-    const requiredFields = [
+    const requiredFields: { field: keyof NewCustomerFormData, label: string }[] = [
       { field: 'name', label: 'Customer Name' },
       { field: 'gst_number', label: 'GST Number' },
       { field: 'pan_number', label: 'PAN Number' },
@@ -346,22 +348,20 @@ const CustomerOnboardingForm = ({ onCancel, prefillData }: CustomerOnboardingFor
     ];
     
     requiredFields.forEach(({ field, label }) => {
-      if (!formData[field as keyof typeof formData].trim()) {
+      const value = formData[field];
+      if (typeof value !== 'string' || !value.trim()) {
         newErrors[field] = `${label} is required`;
       }
     });
     
-    // GST format validation (basic format: 2 chars, 10 digits, 1 char, 1 digit, 1 char, 1 digit, 1 char)
-    if (formData.gst_number && !/^\d{2}[A-Z]{5}\d{4}[A-Z]{1}[A-Z\d]{1}[Z]{1}[A-Z\d]{1}$/i.test(formData.gst_number)) {
+    if (formData.gst_number && !/^\d{2}[A-Z]{5}\d{4}[A-Z]{1}[A-Z\d]{1}Z[A-Z\d]{1}$/i.test(formData.gst_number)) {
       newErrors.gst_number = "Invalid GST format (e.g. 27AADCA0425P1Z7)";
     }
     
-    // PAN format validation (5 chars, 4 digits, 1 char)
     if (formData.pan_number && !/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/i.test(formData.pan_number)) {
       newErrors.pan_number = "Invalid PAN format (e.g. AADCA0425P)";
     }
     
-    // Email validation if provided
     if (formData.email_address && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email_address)) {
       newErrors.email_address = "Invalid email format";
     }
@@ -381,37 +381,46 @@ const CustomerOnboardingForm = ({ onCancel, prefillData }: CustomerOnboardingFor
     setSubmissionStatus(null);
     
     try {
-      const response = await fetch(`${API_BASE_URL}/api/customers`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(formData),
+      const customerToCreate: NewCustomerFormData = {
+        name: formData.name,
+        phone_number: formData.phone_number || "", // Ensure optional fields are at least empty strings
+        email_address: formData.email_address || "",
+        company: formData.company || "",
+        gst_number: formData.gst_number,
+        pan_number: formData.pan_number,
+        address: formData.address,
+        contact_person: formData.contact_person || "",
+      };
+
+      await createCustomer(customerToCreate); 
+      
+      setSubmissionStatus({
+        type: 'success',
+        message: `Customer ${formData.name} created successfully!`
       });
       
-      const data = await response.json();
+      // Invalidate queries to refresh data elsewhere
+      queryClient.invalidateQueries({ queryKey: ['customers'] });
+      queryClient.invalidateQueries({ queryKey: ['customerCount'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboardStats'] });
       
-      if (response.ok) {
-        setSubmissionStatus({
-          type: 'success',
-          message: `Customer ${formData.name} created successfully!`
-        });
-        
-        // Reset form after successful submission
-        setTimeout(() => {
-          onCancel();
-        }, 2000);
-      } else {
-        setSubmissionStatus({
-          type: 'error',
-          message: data.message || "Failed to create customer"
-        });
-      }
+      setTimeout(() => {
+        onCancel(); 
+      }, 2000);
+
     } catch (error) {
+      let errorMessage = "An unexpected error occurred";
+      if (error instanceof Error) {
+        errorMessage = error.message;
+      } else if (typeof error === 'object' && error !== null && 'message' in error && typeof (error as {message: string}).message === 'string') {
+        errorMessage = (error as {message: string}).message;
+      }
+      
       setSubmissionStatus({
         type: 'error',
-        message: error instanceof Error ? error.message : "An unexpected error occurred"
+        message: `Failed to create customer: ${errorMessage}`
       });
+      console.error("Error creating customer in form:", error);
     } finally {
       setIsSubmitting(false);
     }
@@ -504,7 +513,7 @@ const CustomerOnboardingForm = ({ onCancel, prefillData }: CustomerOnboardingFor
             <input 
               type="text" 
               name="contact_person"
-              value={formData.contact_person}
+              value={formData.contact_person || ""}
               onChange={handleChange}
               placeholder="Name"
               className="w-full p-2 border rounded text-sm"
