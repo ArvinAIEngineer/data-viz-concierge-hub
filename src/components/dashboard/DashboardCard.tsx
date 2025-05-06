@@ -1,6 +1,7 @@
 
 import { ArrowUp } from "lucide-react";
 import { ReactNode } from "react";
+import { useIsMobile } from "@/hooks/use-mobile";
 
 interface DashboardCardProps {
   title: string;
@@ -12,6 +13,8 @@ interface DashboardCardProps {
 }
 
 const DashboardCard = ({ title, source, count, trend, newCount, icon }: DashboardCardProps) => {
+  const isMobile = useIsMobile();
+  
   return (
     <div className="data-card">
       <div className="data-card-header">

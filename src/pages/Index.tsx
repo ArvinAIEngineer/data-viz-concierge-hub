@@ -1,8 +1,11 @@
 
-import { ArrowUp, Users, PackageSearch, FileText, Code, UserCircle, Package, Truck, BarChart } from "lucide-react";
+import { ArrowUp, Users, PackageSearch, FileText, UserCircle, Package, Truck, BarChart } from "lucide-react";
 import DashboardCard from "@/components/dashboard/DashboardCard";
+import { useIsMobile } from "@/hooks/use-mobile";
 
 const Index = () => {
+  const isMobile = useIsMobile();
+  
   const cardData = [
     {
       title: "Customer Master",
@@ -85,7 +88,7 @@ const Index = () => {
         <p className="text-gray-500">Overview of key master data trends across systems</p>
       </div>
       
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      <div className={`grid gap-4 ${isMobile ? 'grid-cols-1' : 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3'}`}>
         {cardData.map((card, index) => (
           <DashboardCard
             key={index}
