@@ -14,14 +14,16 @@ const Index = () => {
   const { data: analytics, isLoading, error } = useQuery({
     queryKey: ['dashboardStats'],
     queryFn: getDashboardStats,
-    onError: (err) => {
-      console.error('Error fetching dashboard stats:', err);
-      toast({
-        title: "Error loading dashboard data",
-        description: "Please check your connection and try again.",
-        variant: "destructive",
-      });
-    },
+    meta: {
+      onError: (err: Error) => {
+        console.error('Error fetching dashboard stats:', err);
+        toast({
+          title: "Error loading dashboard data",
+          description: "Please check your connection and try again.",
+          variant: "destructive",
+        });
+      }
+    }
   });
 
   if (error) {
@@ -35,7 +37,7 @@ const Index = () => {
       source: "Supabase",
       count: isLoading ? "..." : analytics?.totalCustomers || 0,
       trend: isLoading ? "..." : `${analytics?.growthRate ? Math.round(analytics.growthRate) : 0}%`,
-      trendDirection: analytics?.growthRate && analytics.growthRate > 0 ? "up" : "down",
+      trendDirection: analytics?.growthRate && analytics.growthRate > 0 ? "up" : "down" as "up" | "down",
       newCount: isLoading ? "..." : analytics?.newCustomers || 0,
       icon: <Users className="text-blue-500" />
     },

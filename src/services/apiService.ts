@@ -1,4 +1,3 @@
-
 import { Customer, CustomerAnalytics } from "@/types/types";
 import { createClient } from '@supabase/supabase-js';
 
@@ -127,19 +126,18 @@ export const getDashboardStats = async (): Promise<CustomerAnalytics> => {
       endDate.setDate(0);
       endDate.setHours(23, 59, 59, 999);
 
-      const { data: monthData, error: monthError } = await supabase
+      const { count, error: monthError } = await supabase
         .from('customers')
-        .select('count')
+        .select('*', { count: 'exact', head: false })
         .gte('created_at', startDate.toISOString())
-        .lt('created_at', endDate.toISOString())
-        .count();
+        .lt('created_at', endDate.toISOString());
 
       if (monthError) throw monthError;
 
       const monthName = new Date(startDate).toLocaleString('default', { month: 'short' });
       monthlyGrowth.push({
         month: monthName,
-        count: monthData || 0
+        count: count || 0
       });
     }
 
