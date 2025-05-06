@@ -1,4 +1,3 @@
-
 import { Customer, CustomerAnalytics } from "@/types/types";
 import { createClient } from '@supabase/supabase-js';
 

@@ -16,13 +16,15 @@ const Index = () => {
     queryFn: getDashboardStats,
     retry: 1,
     retryDelay: 1000,
-    onError: (err: Error) => {
-      console.error('Error fetching dashboard stats:', err);
-      toast({
-        title: "Error loading dashboard data",
-        description: "Please check your connection and try again.",
-        variant: "destructive",
-      });
+    meta: {
+      onError: (err: Error) => {
+        console.error('Error fetching dashboard stats:', err);
+        toast({
+          title: "Error loading dashboard data",
+          description: "Please check your connection and try again.",
+          variant: "destructive",
+        });
+      }
     }
   });
 
