@@ -1,4 +1,3 @@
-
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -11,9 +10,10 @@ import ReportsPage from "./pages/ReportsPage";
 import SettingsPage from "./pages/SettingsPage";
 import NotFound from "./pages/NotFound";
 import MainLayout from "./components/layout/MainLayout";
-import { useIsMobile } from "./hooks/use-mobile";
+// import { useIsMobile } from "./hooks/use-mobile"; // useIsMobile is not directly used in App.tsx
 
-const queryClient = new QueryClient({
+// Make sure to export queryClient
+export const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       retry: 1,
