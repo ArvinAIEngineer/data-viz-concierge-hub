@@ -1,9 +1,13 @@
 // src/components/chat/ChatAssistant.tsx
 import { useState, useRef } from "react";
 import { Send, X, Upload, User } from "lucide-react";
-import { createCustomer } from "@/services/apiService"; // Import createCustomer
+import { createCustomer } from "@/services/apiService";
 import { Customer } from "@/types/types";
-import { queryClient } from "@/App"; // Import queryClient if you implement cache invalidation
+import { queryClient } from "@/App"; // This import relies on the named export from App.tsx
+
+// ... (rest of the ChatAssistant.tsx code as provided in the previous correct version)
+// Ensure the handleSubmit function within CustomerOnboardingForm uses queryClient.invalidateQueries
+// as shown before.
 
 interface Message {
   id: number;
@@ -19,7 +23,6 @@ interface ChatAssistantProps {
   onClose: () => void;
 }
 
-// This API_BASE_URL is for the non-Supabase chat/upload parts.
 const API_BASE_URL_CHAT = "https://bakend-24ej.onrender.com"; 
 
 const ChatAssistant = ({ onClose }: ChatAssistantProps) => {
@@ -108,7 +111,6 @@ const ChatAssistant = ({ onClose }: ChatAssistantProps) => {
     formData.append('card', file);
     
     try {
-      // This uses the external backend for card upload
       const response = await fetch(`${API_BASE_URL_CHAT}/api/upload-card`, { 
         method: 'POST',
         body: formData,
@@ -157,7 +159,6 @@ const ChatAssistant = ({ onClose }: ChatAssistantProps) => {
 
   const sendMessageToBackend = async (message: string) => {
     try {
-      // This uses the external backend for chat
       const response = await fetch(`${API_BASE_URL_CHAT}/api/chat`, { 
         method: 'POST',
         headers: {
@@ -383,7 +384,7 @@ const CustomerOnboardingForm = ({ onCancel, prefillData }: CustomerOnboardingFor
     try {
       const customerToCreate: NewCustomerFormData = {
         name: formData.name,
-        phone_number: formData.phone_number || "", // Ensure optional fields are at least empty strings
+        phone_number: formData.phone_number || "", 
         email_address: formData.email_address || "",
         company: formData.company || "",
         gst_number: formData.gst_number,
@@ -399,7 +400,6 @@ const CustomerOnboardingForm = ({ onCancel, prefillData }: CustomerOnboardingFor
         message: `Customer ${formData.name} created successfully!`
       });
       
-      // Invalidate queries to refresh data elsewhere
       queryClient.invalidateQueries({ queryKey: ['customers'] });
       queryClient.invalidateQueries({ queryKey: ['customerCount'] });
       queryClient.invalidateQueries({ queryKey: ['dashboardStats'] });
