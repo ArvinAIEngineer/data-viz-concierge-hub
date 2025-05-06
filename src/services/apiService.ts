@@ -1,18 +1,27 @@
 
-import { Customer } from "@/types/types";
+import { Customer, CustomerAnalytics } from "@/types/types";
+import { createClient } from '@supabase/supabase-js';
+
+// This should be configured in your project settings after connecting to Supabase
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
+
+export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 // This would be replaced with your actual API base URL
 const API_BASE_URL = "http://localhost:5000/api";
 
 export const searchCustomers = async (query: string): Promise<Customer[]> => {
   try {
-    const response = await fetch(`${API_BASE_URL}/customers/search?q=${encodeURIComponent(query)}`);
+    const { data, error } = await supabase
+      .from('customers')
+      .select('*')
+      .ilike('name', `%${query}%`)
+      .order('name');
     
-    if (!response.ok) {
-      throw new Error('Failed to search customers');
-    }
+    if (error) throw error;
     
-    return await response.json();
+    return data || [];
   } catch (error) {
     console.error("Error searching customers:", error);
     throw error;
@@ -63,34 +72,102 @@ export const uploadVisitingCard = async (file: File) => {
 
 export const createCustomer = async (customerData: Partial<Customer>) => {
   try {
-    const response = await fetch(`${API_BASE_URL}/customers`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(customerData),
-    });
+    const { data, error } = await supabase
+      .from('customers')
+      .insert([customerData])
+      .select();
     
-    if (!response.ok) {
-      throw new Error('Failed to create customer');
-    }
+    if (error) throw error;
     
-    return await response.json();
+    return data?.[0];
   } catch (error) {
     console.error("Error creating customer:", error);
     throw error;
   }
 };
 
-export const getDashboardStats = async () => {
+export const getDashboardStats = async (): Promise<CustomerAnalytics> => {
   try {
-    const response = await fetch(`${API_BASE_URL}/dashboard/stats`);
+    // Get total customers
+    const { data: customers, error: customersError } = await supabase
+      .from('customers')
+      .select('*');
     
-    if (!response.ok) {
-      throw new Error('Failed to get dashboard statistics');
+    if (customersError) throw customersError;
+
+    // Get new customers in the last month
+    const lastMonth = new Date();
+    lastMonth.setMonth(lastMonth.getMonth() - 1);
+    const lastMonthString = lastMonth.toISOString();
+    
+    const { data: newCustomers, error: newCustomersError } = await supabase
+      .from('customers')
+      .select('*')
+      .gte('created_at', lastMonthString);
+    
+    if (newCustomersError) throw newCustomersError;
+
+    // Calculate company distribution
+    const companies: Record<string, number> = {};
+    customers?.forEach(customer => {
+      const company = customer.company || 'Unknown';
+      companies[company] = (companies[company] || 0) + 1;
+    });
+
+    // Calculate monthly growth for the last 6 months
+    const monthlyGrowth = [];
+    for (let i = 5; i >= 0; i--) {
+      const startDate = new Date();
+      startDate.setMonth(startDate.getMonth() - i);
+      startDate.setDate(1);
+      startDate.setHours(0, 0, 0, 0);
+
+      const endDate = new Date(startDate);
+      endDate.setMonth(endDate.getMonth() + 1);
+      endDate.setDate(0);
+      endDate.setHours(23, 59, 59, 999);
+
+      const { data: monthData, error: monthError } = await supabase
+        .from('customers')
+        .select('count')
+        .gte('created_at', startDate.toISOString())
+        .lt('created_at', endDate.toISOString())
+        .count();
+
+      if (monthError) throw monthError;
+
+      const monthName = new Date(startDate).toLocaleString('default', { month: 'short' });
+      monthlyGrowth.push({
+        month: monthName,
+        count: monthData || 0
+      });
     }
+
+    // Calculate growth rate compared to previous month
+    const twoMonthsAgo = new Date();
+    twoMonthsAgo.setMonth(twoMonthsAgo.getMonth() - 2);
+    const oneMonthAgo = new Date();
+    oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
     
-    return await response.json();
+    const { data: prevMonthCustomers, error: prevMonthError } = await supabase
+      .from('customers')
+      .select('*')
+      .gte('created_at', twoMonthsAgo.toISOString())
+      .lt('created_at', oneMonthAgo.toISOString());
+    
+    if (prevMonthError) throw prevMonthError;
+    
+    const growthRate = prevMonthCustomers && prevMonthCustomers.length > 0 
+      ? ((newCustomers?.length || 0) - prevMonthCustomers.length) / prevMonthCustomers.length * 100
+      : 0;
+
+    return {
+      totalCustomers: customers?.length || 0,
+      newCustomers: newCustomers?.length || 0,
+      growthRate,
+      companyCounts: companies,
+      monthlyGrowth
+    };
   } catch (error) {
     console.error("Error getting dashboard stats:", error);
     throw error;

@@ -2,17 +2,41 @@
 import { ArrowUp, Users, PackageSearch, FileText, UserCircle, Package, Truck, BarChart } from "lucide-react";
 import DashboardCard from "@/components/dashboard/DashboardCard";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { useQuery } from "@tanstack/react-query";
+import { getDashboardStats } from "@/services/apiService";
+import { Skeleton } from "@/components/ui/skeleton";
+import { useToast } from "@/hooks/use-toast";
 
 const Index = () => {
   const isMobile = useIsMobile();
+  const { toast } = useToast();
   
+  const { data: analytics, isLoading, error } = useQuery({
+    queryKey: ['dashboardStats'],
+    queryFn: getDashboardStats,
+    onError: (err) => {
+      console.error('Error fetching dashboard stats:', err);
+      toast({
+        title: "Error loading dashboard data",
+        description: "Please check your connection and try again.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  if (error) {
+    console.error("Dashboard data error:", error);
+  }
+
+  // Default card data when API data is not available
   const cardData = [
     {
       title: "Customer Master",
-      source: "SAP",
-      count: "5,842",
-      trend: "+3%",
-      newCount: "156",
+      source: "Supabase",
+      count: isLoading ? "..." : analytics?.totalCustomers || 0,
+      trend: isLoading ? "..." : `${analytics?.growthRate ? Math.round(analytics.growthRate) : 0}%`,
+      trendDirection: analytics?.growthRate && analytics.growthRate > 0 ? "up" : "down",
+      newCount: isLoading ? "..." : analytics?.newCustomers || 0,
       icon: <Users className="text-blue-500" />
     },
     {
@@ -96,8 +120,10 @@ const Index = () => {
             source={card.source}
             count={card.count}
             trend={card.trend}
+            trendDirection={card.trendDirection}
             newCount={card.newCount}
             icon={card.icon}
+            isLoading={index === 0 ? isLoading : false}
           />
         ))}
       </div>

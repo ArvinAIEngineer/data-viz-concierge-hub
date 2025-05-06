@@ -2,14 +2,13 @@
 export interface Customer {
   id: number;
   name: string;
-  gstNumber: string;
-  panNumber: string;
+  phone_number: string;
+  email_address: string;
+  company: string;
+  gst_number: string;
+  pan_number: string;
   address: string;
-  contactPerson: string;
-  email: string;
-  phone: string;
-  industry: string;
-  partnershipLevel: string;
+  created_at: string;
 }
 
 export interface ChatMessage {
@@ -22,7 +21,19 @@ export interface ChatMessage {
 export interface DataCard {
   title: string;
   source: string;
-  count: string;
-  trend: string;
-  newCount: string;
+  count: string | number;
+  trend?: string;
+  trendDirection?: "up" | "down" | "neutral";
+  newCount?: string | number;
+}
+
+export interface CustomerAnalytics {
+  totalCustomers: number;
+  newCustomers: number;
+  growthRate: number;
+  companyCounts: Record<string, number>;
+  monthlyGrowth: {
+    month: string;
+    count: number;
+  }[];
 }
