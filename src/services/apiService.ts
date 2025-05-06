@@ -1,8 +1,8 @@
+
 import { Customer, CustomerAnalytics } from "@/types/types";
 import { createClient } from '@supabase/supabase-js';
 
 // Using the provided connection string
-// Note: Exposing credentials in code is not recommended for production
 const supabaseUrl = 'https://rntkfuowrlnbtvwwbgae.supabase.co';
 const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJudGtmdW93cmxuYnR2d3diZ2FlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MTU3MjY5MDEsImV4cCI6MjAzMTMwMjkwMX0.1FQiEZ_Jn4Ly3XPCk51bZHyI9j5YPNBfE6GaNqGPe8A';
 
@@ -10,6 +10,22 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 // This would be replaced with your actual API base URL
 const API_BASE_URL = "http://localhost:5000/api";
+
+export const getCustomers = async (): Promise<Customer[]> => {
+  try {
+    const { data, error } = await supabase
+      .from('customers')
+      .select('*')
+      .order('name');
+    
+    if (error) throw error;
+    
+    return data || [];
+  } catch (error) {
+    console.error("Error getting customers:", error);
+    throw error;
+  }
+};
 
 export const searchCustomers = async (query: string): Promise<Customer[]> => {
   try {
@@ -82,6 +98,21 @@ export const createCustomer = async (customerData: Partial<Customer>) => {
     return data?.[0];
   } catch (error) {
     console.error("Error creating customer:", error);
+    throw error;
+  }
+};
+
+export const getCustomerCount = async (): Promise<number> => {
+  try {
+    const { count, error } = await supabase
+      .from('customers')
+      .select('*', { count: 'exact', head: true });
+    
+    if (error) throw error;
+    
+    return count || 0;
+  } catch (error) {
+    console.error("Error getting customer count:", error);
     throw error;
   }
 };

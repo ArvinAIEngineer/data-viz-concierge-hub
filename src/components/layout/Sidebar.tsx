@@ -1,8 +1,17 @@
 
 import { NavLink } from "react-router-dom";
 import { Home, Users, PackageSearch, FileBarChart, Settings, LogOut } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { getCustomerCount } from "@/services/apiService";
+import { Skeleton } from "@/components/ui/skeleton";
 
 const Sidebar = () => {
+  const { data: customerCount, isLoading: isCustomerCountLoading } = useQuery({
+    queryKey: ['customerCount'],
+    queryFn: getCustomerCount,
+    retry: 1
+  });
+
   return (
     <div className="w-64 bg-mdm-sidebar border-r border-gray-200 flex flex-col">
       <div className="p-5 border-b border-gray-200">
@@ -29,6 +38,13 @@ const Sidebar = () => {
         >
           <Users size={20} />
           <span>Customers</span>
+          {isCustomerCountLoading ? (
+            <Skeleton className="ml-auto w-6 h-5 rounded-full" />
+          ) : (
+            <span className="ml-auto bg-gray-200 text-gray-700 text-xs px-2 py-0.5 rounded-full">
+              {customerCount}
+            </span>
+          )}
         </NavLink>
         
         <NavLink 
