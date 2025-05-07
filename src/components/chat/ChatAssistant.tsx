@@ -1,13 +1,8 @@
-// src/components/chat/ChatAssistant.tsx
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { Send, X, Upload, User } from "lucide-react";
 import { createCustomer } from "@/services/apiService";
 import { Customer } from "@/types/types";
-import { queryClient } from "@/App"; // This import relies on the named export from App.tsx
-
-// ... (rest of the ChatAssistant.tsx code as provided in the previous correct version)
-// Ensure the handleSubmit function within CustomerOnboardingForm uses queryClient.invalidateQueries
-// as shown before.
+import { queryClient } from "@/App";
 
 interface Message {
   id: number;
@@ -17,21 +12,23 @@ interface Message {
   customerData?: any;
   extractedData?: any;
   status?: string;
+  imageDataUrl?: string;
 }
 
 interface ChatAssistantProps {
   onClose: () => void;
 }
 
-const API_BASE_URL_CHAT = "https://bakend-24ej.onrender.com"; 
+const API_BASE_URL_CHAT = import.meta.env.VITE_CHAT_BACKEND_URL || "https://bakend-24ej.onrender.com";
 
 const ChatAssistant = ({ onClose }: ChatAssistantProps) => {
   const [messages, setMessages] = useState<Message[]>([
     {
       id: 1,
-      text: "I'm here to help! Try something like 'Find customer Acme Corporation' or ask me about GST or customer onboarding.",
+      text: "I'm here to help! Try 'Find customer [name/GST]' or 'Add customer [details]'. You can also upload a visiting card.",
       isUser: false,
-      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      status: "greeting"
     }
   ]);
   const [inputMessage, setInputMessage] = useState("");
@@ -39,158 +36,268 @@ const ChatAssistant = ({ onClose }: ChatAssistantProps) => {
   const [isLoading, setIsLoading] = useState(false);
   const [uploadedFiles, setUploadedFiles] = useState<File[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  
-  const handleSendMessage = async () => {
-    if (!inputMessage.trim() && uploadedFiles.length === 0) return;
-    
-    const newUserMessage: Message = {
-      id: messages.length + 1,
-      text: inputMessage,
-      isUser: true,
-      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-    };
-    
-    setMessages(prev => [...prev, newUserMessage]);
-    setIsLoading(true);
-    
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
+
+  const convertToJPEG = (file: File): Promise<File> => {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      if (!ctx) {
+        reject(new Error('Failed to get canvas context'));
+        return;
+      }
+
+      img.onload = () => {
+        canvas.width = img.width;
+        canvas.height = img.height;
+        ctx.drawImage(img, 0, 0);
+        canvas.toBlob((blob) => {
+          if (blob) {
+            const convertedFile = new File([blob], file.name.replace(/\.[^/.]+$/, '.jpg'), {
+              type: 'image/jpeg',
+              lastModified: Date.now(),
+            });
+            resolve(convertedFile);
+          } else {
+            reject(new Error('Failed to convert image to JPEG'));
+          }
+        }, 'image/jpeg', 0.9);
+      };
+
+      img.onerror = () => reject(new Error('Failed to load image'));
+      img.src = URL.createObjectURL(file);
+    });
+  };
+
+  const getBase64 = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = (error) => reject(error);
+      reader.readAsDataURL(file);
+    });
+  };
+
+  const sendMessageToChatBackend = async (messageText: string) => {
     try {
-      if (uploadedFiles.length > 0) {
-        await handleCardUpload(uploadedFiles[0]);
+      const response = await fetch(`${API_BASE_URL_CHAT}/api/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: messageText }),
+      });
+      const responseData = await response.json();
+      if (!response.ok) {
+        const errorMsg = responseData?.message || responseData?.error || `Server error: ${response.status}`;
+        throw new Error(errorMsg);
+      }
+      return responseData;
+    } catch (error) {
+      console.error('Error communicating with chat backend:', error);
+      throw error instanceof Error ? error : new Error("Failed to communicate with chat service.");
+    }
+  };
+
+  const handleSendMessage = async () => {
+    const currentInput = inputMessage.trim();
+    const currentFiles = [...uploadedFiles];
+
+    if (!currentInput && currentFiles.length === 0) return;
+
+    setIsLoading(true);
+
+    if (currentInput) {
+      const newUserMessage: Message = {
+        id: Date.now(),
+        text: currentInput,
+        isUser: true,
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      };
+      setMessages(prev => [...prev, newUserMessage]);
+      setInputMessage("");
+    }
+
+    try {
+      if (currentFiles.length > 0 && currentFiles[0]) {
+        await handleCardUpload(currentFiles[0]);
         setUploadedFiles([]);
-      } else {
-        const response = await sendMessageToBackend(inputMessage);
+      } else if (currentInput) {
+        const backendResponse = await sendMessageToChatBackend(currentInput);
         
+        console.log("Backend response to /api/chat:", JSON.stringify(backendResponse, null, 2));
+
         setMessages(prev => [...prev, {
-          id: prev.length + 1,
-          text: response.reply,
+          id: Date.now() + 1,
+          text: backendResponse.message || "Received an empty response.",
           isUser: false,
           timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-          customerData: response.customer_data,
-          extractedData: response.extracted_data,
-          status: response.status
+          customerData: backendResponse.customer_data || null,
+          extractedData: backendResponse.extracted_data || null,
+          status: backendResponse.status || "unknown"
         }]);
-        
-        if (response.status === "not_found" && inputMessage.toLowerCase().includes("find customer")) {
-          setTimeout(() => {
-            setMessages(prev => [...prev, {
-              id: prev.length + 1,
-              text: "This customer does not exist. To create a new customer, please have the following ready:\n\n• GST Number\n• PAN Number\n• Soft copies of ID Proofs",
-              isUser: false,
-              timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-            }]);
-          }, 500);
-        }
       }
     } catch (error) {
-      console.error("Error sending message:", error);
+      console.error("Error in handleSendMessage:", error);
       setMessages(prev => [...prev, {
-        id: prev.length + 1,
-        text: "Sorry, I encountered an error communicating with the server. Please try again later.",
+        id: Date.now() + 2,
+        text: `Error: ${error instanceof Error ? error.message : "An unexpected error occurred."}`,
         isUser: false,
-        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        status: "error_response"
       }]);
     } finally {
       setIsLoading(false);
-      setInputMessage("");
     }
   };
-  
+
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       handleSendMessage();
     }
   };
-  
+
   const handleCreateNewCustomer = () => {
     setShowForm(true);
   };
 
   const handleCardUpload = async (file: File) => {
-    const formData = new FormData();
-    formData.append('card', file);
-    
+    console.log("Original file details:", {
+      name: file.name,
+      size: file.size,
+      type: file.type,
+      lastModified: file.lastModified
+    });
+
+    let convertedFile: File;
     try {
-      const response = await fetch(`${API_BASE_URL_CHAT}/api/upload-card`, { 
+      convertedFile = await convertToJPEG(file);
+      console.log("Converted file details:", {
+        name: convertedFile.name,
+        size: convertedFile.size,
+        type: convertedFile.type,
+        lastModified: convertedFile.lastModified
+      });
+    } catch (error) {
+      console.error("Error converting image to JPEG:", error);
+      setMessages(prev => [...prev, {
+        id: Date.now(),
+        text: `Error: Failed to convert image ${file.name} to JPEG.`,
+        isUser: false,
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        status: "error_image_conversion"
+      }]);
+      setIsLoading(false);
+      return;
+    }
+
+    let base64: string;
+    try {
+      base64 = await getBase64(convertedFile);
+      console.log("Converted file base64 (first 100 chars):", base64.substring(0, 100));
+    } catch (error) {
+      console.error("Error getting base64:", error);
+      base64 = "";
+    }
+
+    const userVisualConfirmationMessage: Message = {
+      id: Date.now() - 1,
+      text: `Processing uploaded card: ${convertedFile.name}`,
+      isUser: true,
+      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      imageDataUrl: base64
+    };
+    setMessages(prev => [...prev, userVisualConfirmationMessage]);
+
+    try {
+      const formData = new FormData();
+      formData.append("card", convertedFile);
+
+      const response = await fetch(`${API_BASE_URL_CHAT}/api/upload-card`, {
         method: 'POST',
         body: formData,
       });
-      
+
       const data = await response.json();
       
       if (!response.ok) {
-        throw new Error(data.error || "Failed to process card");
+        throw new Error(data.message || data.error || `Failed to process card: ${response.status}`);
       }
       
-      const responseText = data.match_status === "existing_match" 
-        ? `Found matching customer in the database:\n\nName: ${data.matched_customer?.name || 'N/A'}\nCompany: ${data.matched_customer?.company || 'N/A'}\nGST: ${data.matched_customer?.gst_number || 'N/A'}\nEmail: ${data.matched_customer?.email_address || 'N/A'}`
-        : `Extracted information from card:\n\nName: ${data.extracted_data?.name || 'N/A'}\nCompany: ${data.extracted_data?.company || 'N/A'}\nPhone: ${data.extracted_data?.phone_number || 'N/A'}\nEmail: ${data.extracted_data?.email_address || 'N/A'}\nGST: ${data.extracted_data?.gst_number || 'N/A'}\nPAN: ${data.extracted_data?.pan_number || 'N/A'}`;
-      
+      let responseText = data.message || "Card processed.";
+
+      if (data.status === "existing_customer_card" && data.matched_customer) {
+        responseText = `This card seems to match an existing customer:\nName: ${data.matched_customer.name || 'N/A'}\nCompany: ${data.matched_customer.company || 'N/A'}\nGST: ${data.matched_customer.gst_number || 'N/A'}\nPAN: ${data.matched_customer.pan_number || 'N/A'}\nEmail: ${data.matched_customer.email_address || 'N/A'}\nPhone: ${data.matched_customer.phone_number || 'N/A'}\nAddress: ${data.matched_customer.address || 'N/A'}`;
+      } else if (data.status === "new_customer_card" && data.extracted_data) {
+        responseText = "Extracted details from card for a new potential customer:\n";
+        for (const [key, value] of Object.entries(data.extracted_data)) {
+          if (value) responseText += `${key.replace('_', ' ').replace(/\b\w/g, c => c.toUpperCase())}: ${value}\n`;
+        }
+        responseText += "\nWould you like to create a new customer with this information?";
+      } else if (data.status === "extraction_failed_card") {
+        responseText = `Could not extract structured details. Raw text: \n${data.raw_text?.substring(0, 200) || "No text extracted."}...`;
+      } else if (data.status === "error") {
+        responseText = `${data.message}\nRaw text: ${data.raw_text?.substring(0, 200) || "No text extracted."}`;
+      }
+
       setMessages(prev => [...prev, {
-        id: prev.length + 1,
+        id: Date.now(),
         text: responseText,
         isUser: false,
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        customerData: data.matched_customer,
-        extractedData: data.extracted_data,
-        status: data.match_status
+        customerData: data.matched_customer || null,
+        extractedData: data.extracted_data || null,
+        status: data.status || "card_processed"
       }]);
       
-      if (data.match_status === "new_potential") {
-        setTimeout(() => {
-          setMessages(prev => [...prev, {
-            id: prev.length + 1,
-            text: "Would you like to create a new customer with this information?",
-            isUser: false,
-            timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-          }]);
-        }, 500);
-      }
     } catch (error) {
       console.error("Error uploading card:", error);
       setMessages(prev => [...prev, {
-        id: prev.length + 1,
-        text: `Failed to process the card. Error: ${error instanceof Error ? error.message : "Unknown error"}`,
+        id: Date.now(),
+        text: `Failed to process card: ${error instanceof Error ? error.message : "Unknown error"}`,
         isUser: false,
-        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        status: "upload_error"
       }]);
+    } finally {
+      setIsLoading(false);
     }
   };
 
-  const sendMessageToBackend = async (message: string) => {
-    try {
-      const response = await fetch(`${API_BASE_URL_CHAT}/api/chat`, { 
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ message }),
-      });
-      
-      if (!response.ok) {
-        throw new Error(`Server responded with status: ${response.status}`);
-      }
-      
-      const data = await response.json();
-      return data;
-    } catch (error) {
-      console.error('Error communicating with backend:', error);
-      throw error;
-    }
-  };
-  
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
-      setUploadedFiles(Array.from(e.target.files));
+      const file = e.target.files[0];
+      setUploadedFiles([file]);
+      setInputMessage(`Uploading: ${file.name}`);
       setTimeout(() => {
         handleSendMessage();
       }, 100);
     }
   };
-  
+
   const handleUploadClick = () => {
-    fileInputRef.current?.click();
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+      fileInputRef.current.click();
+    }
   };
+
+  const shouldShowCreateButton = messages.some(msg => {
+    const textForMatching = typeof msg.text === 'string' ? msg.text.toLowerCase() : '';
+    const statusMatch = msg.status === "new_potential_chat" || 
+                       msg.status === "new_customer_card" ||
+                       msg.status === "not_found";
+    
+    const botSuggestsCreation = textForMatching.includes("new customer") ||
+                               textForMatching.includes("add them") ||
+                               textForMatching.includes("create a new customer");
+
+    return !msg.isUser && (statusMatch || botSuggestsCreation) && !showForm;
+  });
 
   return (
     <div className="chat-container">
@@ -215,36 +322,39 @@ const ChatAssistant = ({ onClose }: ChatAssistantProps) => {
         {messages.map((message) => (
           <div key={message.id} className={`chat-message ${message.isUser ? 'user' : 'bot'}`}>
             {!message.isUser && (
-              <div className="h-8 w-8 bg-blue-500 rounded-full flex items-center justify-center">
+              <div className="h-8 w-8 bg-blue-500 rounded-full flex items-center justify-center shrink-0">
                 <User size={14} className="text-white" />
               </div>
             )}
             <div className={`chat-bubble ${message.isUser ? 'user' : 'bot'}`}>
+              {message.imageDataUrl && (
+                <img src={message.imageDataUrl} alt="Uploaded card" className="max-w-xs mb-2 rounded" />
+              )}
               <div className="whitespace-pre-wrap">{message.text}</div>
               <div className="text-xs opacity-70 mt-1">{message.timestamp}</div>
             </div>
             {message.isUser && (
-              <div className="h-8 w-8 bg-gray-300 rounded-full flex items-center justify-center">
+              <div className="h-8 w-8 bg-gray-300 rounded-full flex items-center justify-center shrink-0">
                 <User size={14} className="text-gray-600" />
               </div>
             )}
           </div>
         ))}
+        <div ref={messagesEndRef} />
         
         {isLoading && (
           <div className="flex justify-center my-2">
             <div className="bg-gray-200 px-3 py-1 rounded-full animate-pulse">
-              <span className="text-xs text-gray-500">Assistant is typing...</span>
+              <span className="text-xs text-gray-500">Assistant is thinking...</span>
             </div>
           </div>
         )}
         
-        {messages.some(m => m.text.includes("This customer does not exist") || 
-                         (m.status === "new_potential" && !showForm)) && (
-          <div className="mt-4">
+        {shouldShowCreateButton && (
+          <div className="mt-4 p-2 flex justify-center">
             <button 
               onClick={handleCreateNewCustomer}
-              className="bg-mdm-primary text-white px-4 py-2 rounded-lg text-sm font-medium"
+              className="bg-mdm-primary text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-mdm-primary/90"
             >
               Create New Customer
             </button>
@@ -254,7 +364,7 @@ const ChatAssistant = ({ onClose }: ChatAssistantProps) => {
         {showForm && (
           <CustomerOnboardingForm 
             onCancel={() => setShowForm(false)} 
-            prefillData={messages.find(m => m.extractedData)?.extractedData}
+            prefillData={messages.slice().reverse().find(m => !m.isUser && m.extractedData)?.extractedData}
           />
         )}
       </div>
@@ -266,32 +376,32 @@ const ChatAssistant = ({ onClose }: ChatAssistantProps) => {
             value={inputMessage}
             onChange={(e) => setInputMessage(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="Search for a customer..."
+            placeholder="Search or describe customer details..."
             className="chat-input pr-24"
             disabled={isLoading}
           />
-          <div className="absolute right-2 top-1/2 transform -translate-y-1/2 flex gap-2">
+          <div className="absolute right-2 top-1/2 transform -translate-y-1/2 flex gap-1">
             <button
               onClick={handleUploadClick}
-              className="text-gray-500 hover:text-mdm-primary p-2"
+              className="text-gray-500 hover:text-mdm-primary p-2 rounded-full hover:bg-gray-100"
               disabled={isLoading}
               title="Upload visiting card"
             >
-              <Upload size={16} />
-              <input 
-                type="file" 
-                ref={fileInputRef}
-                onChange={handleFileChange}
-                accept="image/*,.pdf"
-                className="hidden"
-              />
+              <Upload size={18} />
             </button>
+            <input 
+              type="file" 
+              ref={fileInputRef}
+              onChange={handleFileChange}
+              accept="image/*"
+              className="hidden"
+            />
             <button
               onClick={handleSendMessage}
-              className="bg-mdm-primary text-white p-2 rounded-full"
-              disabled={isLoading}
+              className="bg-mdm-primary text-white p-2 rounded-full hover:bg-mdm-primary/90 disabled:opacity-50"
+              disabled={isLoading || (!inputMessage.trim() && uploadedFiles.length === 0)}
             >
-              <Send size={16} />
+              <Send size={18} />
             </button>
           </div>
         </div>
@@ -307,7 +417,6 @@ interface CustomerOnboardingFormProps {
 
 type NewCustomerFormData = Omit<Customer, 'id' | 'created_at'>;
 
-
 const CustomerOnboardingForm = ({ onCancel, prefillData }: CustomerOnboardingFormProps) => {
   const [formData, setFormData] = useState<NewCustomerFormData>({
     name: prefillData?.name || "",
@@ -315,7 +424,6 @@ const CustomerOnboardingForm = ({ onCancel, prefillData }: CustomerOnboardingFor
     gst_number: prefillData?.gst_number || "",
     pan_number: prefillData?.pan_number || "",
     address: prefillData?.address || "",
-    contact_person: prefillData?.contact_person || prefillData?.name || "",
     email_address: prefillData?.email_address || "",
     phone_number: prefillData?.phone_number || "",
   });
@@ -325,97 +433,82 @@ const CustomerOnboardingForm = ({ onCancel, prefillData }: CustomerOnboardingFor
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
-    setFormData(prev => ({
-      ...prev,
-      [name]: value
-    }));
-    
+    setFormData(prev => ({ ...prev, [name]: value }));
     if (errors[name]) {
-      setErrors(prev => ({
-        ...prev,
-        [name]: ""
-      }));
+      setErrors(prev => ({ ...prev, [name]: "" }));
     }
   };
-  
+
   const validateForm = () => {
     const newErrors: Record<string, string> = {};
-    
     const requiredFields: { field: keyof NewCustomerFormData, label: string }[] = [
       { field: 'name', label: 'Customer Name' },
-      { field: 'gst_number', label: 'GST Number' },
-      { field: 'pan_number', label: 'PAN Number' },
-      { field: 'address', label: 'Address' }
     ];
-    
+
     requiredFields.forEach(({ field, label }) => {
       const value = formData[field];
       if (typeof value !== 'string' || !value.trim()) {
         newErrors[field] = `${label} is required`;
       }
     });
-    
+
     if (formData.gst_number && !/^\d{2}[A-Z]{5}\d{4}[A-Z]{1}[A-Z\d]{1}Z[A-Z\d]{1}$/i.test(formData.gst_number)) {
       newErrors.gst_number = "Invalid GST format (e.g. 27AADCA0425P1Z7)";
     }
-    
     if (formData.pan_number && !/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/i.test(formData.pan_number)) {
       newErrors.pan_number = "Invalid PAN format (e.g. AADCA0425P)";
     }
-    
-    if (formData.email_address && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email_address)) {
+    if (formData.email_address && formData.email_address.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email_address)) {
       newErrors.email_address = "Invalid email format";
     }
-    
+    if (formData.phone_number && !/^\+?\d{10,15}$/.test(formData.phone_number.replace(/\D/g, ''))) {
+      newErrors.phone_number = "Invalid phone number (10-15 digits)";
+    }
+
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
-  
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
-    if (!validateForm()) {
-      return;
-    }
-    
+    if (!validateForm()) return;
+
     setIsSubmitting(true);
     setSubmissionStatus(null);
-    
+
     try {
       const customerToCreate: NewCustomerFormData = {
         name: formData.name,
-        phone_number: formData.phone_number || "", 
+        phone_number: formData.phone_number || "",
         email_address: formData.email_address || "",
         company: formData.company || "",
-        gst_number: formData.gst_number,
-        pan_number: formData.pan_number,
-        address: formData.address,
-        contact_person: formData.contact_person || "",
+        gst_number: formData.gst_number || "",
+        pan_number: formData.pan_number || "",
+        address: formData.address || "",
       };
 
-      await createCustomer(customerToCreate); 
-      
+      const result = await createCustomer(customerToCreate);
+
       setSubmissionStatus({
         type: 'success',
-        message: `Customer ${formData.name} created successfully!`
+        message: `Customer "${formData.name}" created successfully!`
       });
-      
+
       queryClient.invalidateQueries({ queryKey: ['customers'] });
       queryClient.invalidateQueries({ queryKey: ['customerCount'] });
       queryClient.invalidateQueries({ queryKey: ['dashboardStats'] });
-      
-      setTimeout(() => {
-        onCancel(); 
-      }, 2000);
 
+      setTimeout(() => {
+        onCancel();
+      }, 2000);
     } catch (error) {
-      let errorMessage = "An unexpected error occurred";
+      let errorMessage = "An unexpected error occurred while creating the customer.";
       if (error instanceof Error) {
         errorMessage = error.message;
       } else if (typeof error === 'object' && error !== null && 'message' in error && typeof (error as {message: string}).message === 'string') {
         errorMessage = (error as {message: string}).message;
       }
-      
+
       setSubmissionStatus({
         type: 'error',
         message: `Failed to create customer: ${errorMessage}`
@@ -427,175 +520,132 @@ const CustomerOnboardingForm = ({ onCancel, prefillData }: CustomerOnboardingFor
   };
 
   return (
-    <div className="bg-blue-50 p-4 rounded-lg mt-4">
-      <div className="flex justify-between items-center mb-3">
-        <h3 className="font-medium">New Customer Onboarding</h3>
-        <button onClick={onCancel} className="text-gray-500">
-          <X size={16} />
+    <div className="bg-blue-50 p-4 rounded-lg mt-4 text-sm">
+      <div className="flex justify-between items-center mb-4">
+        <h3 className="font-medium text-base text-gray-800">Add New Customer</h3>
+        <button onClick={onCancel} className="text-gray-500 hover:text-gray-700">
+          <X size={18} />
         </button>
       </div>
-      
+
       {submissionStatus && (
-        <div className={`mb-4 p-2 rounded ${submissionStatus.type === 'success' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+        <div className={`mb-4 p-3 rounded-md text-xs ${
+          submissionStatus.type === 'success' 
+            ? 'bg-green-100 text-green-700 border border-green-200' 
+            : 'bg-red-100 text-red-700 border border-red-200'
+        }`}>
           {submissionStatus.message}
         </div>
       )}
-      
+
       <form className="space-y-4" onSubmit={handleSubmit}>
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
-            <label className="block text-sm mb-1">GST Number <span className="text-red-500">*</span></label>
-            <input 
-              type="text" 
+            <label className="block text-xs font-medium text-gray-700 mb-1">Customer Name <span className="text-red-500">*</span></label>
+            <input
+              type="text"
+              name="name"
+              value={formData.name}
+              onChange={handleChange}
+              placeholder="e.g. John Doe"
+              className={`w-full p-2 border rounded-md text-sm ${errors.name ? 'border-red-500' : 'border-gray-300'} focus:outline-none focus:ring-2 focus:ring-mdm-primary`}
+            />
+            {errors.name && <p className="text-red-500 text-xs mt-1">{errors.name}</p>}
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1">Company</label>
+            <input
+              type="text"
+              name="company"
+              value={formData.company}
+              onChange={handleChange}
+              placeholder="e.g. ACME Corp"
+              className={`w-full p-2 border rounded-md text-sm ${errors.company ? 'border-red-500' : 'border-gray-300'} focus:outline-none focus:ring-2 focus:ring-mdm-primary`}
+            />
+            {errors.company && <p className="text-red-500 text-xs mt-1">{errors.company}</p>}
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1">GST Number</label>
+            <input
+              type="text"
               name="gst_number"
               value={formData.gst_number}
               onChange={handleChange}
               placeholder="e.g. 27AADCA0425P1Z7"
-              className={`w-full p-2 border rounded text-sm ${errors.gst_number ? 'border-red-500' : ''}`}
+              className={`w-full p-2 border rounded-md text-sm ${errors.gst_number ? 'border-red-500' : 'border-gray-300'} focus:outline-none focus:ring-2 focus:ring-mdm-primary`}
             />
             {errors.gst_number && <p className="text-red-500 text-xs mt-1">{errors.gst_number}</p>}
           </div>
           <div>
-            <label className="block text-sm mb-1">PAN Number <span className="text-red-500">*</span></label>
-            <input 
-              type="text" 
+            <label className="block text-xs font-medium text-gray-700 mb-1">PAN Number</label>
+            <input
+              type="text"
               name="pan_number"
               value={formData.pan_number}
               onChange={handleChange}
               placeholder="e.g. AADCA0425P"
-              className={`w-full p-2 border rounded text-sm ${errors.pan_number ? 'border-red-500' : ''}`}
+              className={`w-full p-2 border rounded-md text-sm ${errors.pan_number ? 'border-red-500' : 'border-gray-300'} focus:outline-none focus:ring-2 focus:ring-mdm-primary`}
             />
             {errors.pan_number && <p className="text-red-500 text-xs mt-1">{errors.pan_number}</p>}
           </div>
         </div>
-        
+
         <div>
-          <label className="block text-sm mb-1">Customer Name <span className="text-red-500">*</span></label>
-          <input 
-            type="text" 
-            name="name"
-            value={formData.name}
-            onChange={handleChange}
-            placeholder="Enter full legal name"
-            className={`w-full p-2 border rounded text-sm ${errors.name ? 'border-red-500' : ''}`}
-          />
-          {errors.name && <p className="text-red-500 text-xs mt-1">{errors.name}</p>}
-        </div>
-        
-        <div>
-          <label className="block text-sm mb-1">Company</label>
-          <input 
-            type="text" 
-            name="company"
-            value={formData.company}
-            onChange={handleChange}
-            placeholder="Enter company name (if different from customer name)"
-            className="w-full p-2 border rounded text-sm"
-          />
-        </div>
-        
-        <div>
-          <label className="block text-sm mb-1">Address <span className="text-red-500">*</span></label>
-          <textarea 
+          <label className="block text-xs font-medium text-gray-700 mb-1">Address</label>
+          <textarea
             name="address"
             value={formData.address}
             onChange={handleChange}
-            placeholder="Enter complete address"
-            className={`w-full p-2 border rounded text-sm ${errors.address ? 'border-red-500' : ''}`}
-            rows={2}
-          ></textarea>
+            placeholder="e.g. 123 Main St, City, State, ZIP"
+            rows={3}
+            className={`w-full p-2 border rounded-md text-sm ${errors.address ? 'border-red-500' : 'border-gray-300'} focus:outline-none focus:ring-2 focus:ring-mdm-primary`}
+          />
           {errors.address && <p className="text-red-500 text-xs mt-1">{errors.address}</p>}
         </div>
-        
-        <div className="grid grid-cols-3 gap-4">
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
-            <label className="block text-sm mb-1">Contact Person</label>
-            <input 
-              type="text" 
-              name="contact_person"
-              value={formData.contact_person || ""}
-              onChange={handleChange}
-              placeholder="Name"
-              className="w-full p-2 border rounded text-sm"
-            />
-          </div>
-          <div>
-            <label className="block text-sm mb-1">Email</label>
-            <input 
-              type="email" 
+            <label className="block text-xs font-medium text-gray-700 mb-1">Email</label>
+            <input
+              type="email"
               name="email_address"
               value={formData.email_address}
               onChange={handleChange}
-              placeholder="email@example.com"
-              className={`w-full p-2 border rounded text-sm ${errors.email_address ? 'border-red-500' : ''}`}
+              placeholder="e.g. contact@example.com"
+              className={`w-full p-2 border rounded-md text-sm ${errors.email_address ? 'border-red-500' : 'border-gray-300'} focus:outline-none focus:ring-2 focus:ring-mdm-primary`}
             />
             {errors.email_address && <p className="text-red-500 text-xs mt-1">{errors.email_address}</p>}
           </div>
           <div>
-            <label className="block text-sm mb-1">Phone</label>
-            <input 
-              type="tel" 
+            <label className="block text-xs font-medium text-gray-700 mb-1">Phone</label>
+            <input
+              type="tel"
               name="phone_number"
               value={formData.phone_number}
               onChange={handleChange}
-              placeholder="+91 9876543210"
-              className="w-full p-2 border rounded text-sm"
+              placeholder="e.g. +91 9876543210"
+              className={`w-full p-2 border rounded-md text-sm ${errors.phone_number ? 'border-red-500' : 'border-gray-300'} focus:outline-none focus:ring-2 focus:ring-mdm-primary`}
             />
+            {errors.phone_number && <p className="text-red-500 text-xs mt-1">{errors.phone_number}</p>}
           </div>
         </div>
-        
-        <div>
-          <p className="text-sm font-medium mb-2">Required Documents</p>
-          
-          <div className="space-y-3">
-            <div>
-              <label className="block text-sm mb-1">GST Certificate <span className="text-red-500">*</span></label>
-              <button 
-                type="button" 
-                className="w-full p-2 border rounded text-sm flex items-center justify-center gap-2 bg-gray-50 hover:bg-gray-100"
-              >
-                <Upload size={14} />
-                <span>Upload PDF or Image (Max 5MB)</span>
-              </button>
-            </div>
-            
-            <div>
-              <label className="block text-sm mb-1">PAN Card <span className="text-red-500">*</span></label>
-              <button 
-                type="button" 
-                className="w-full p-2 border rounded text-sm flex items-center justify-center gap-2 bg-gray-50 hover:bg-gray-100"
-              >
-                <Upload size={14} />
-                <span>Upload PDF or Image (Max 5MB)</span>
-              </button>
-            </div>
-            
-            <div>
-              <label className="block text-sm mb-1">Additional ID Proof (Optional)</label>
-              <button 
-                type="button" 
-                className="w-full p-2 border rounded text-sm flex items-center justify-center gap-2 bg-gray-50 hover:bg-gray-100"
-              >
-                <Upload size={14} />
-                <span>Upload PDF or Image (Max 5MB)</span>
-              </button>
-            </div>
-          </div>
-        </div>
-        
-        <div className="flex justify-end gap-3">
-          <button 
-            type="button" 
+
+        <div className="flex justify-end gap-2 pt-3">
+          <button
+            type="button"
             onClick={onCancel}
-            className="px-4 py-2 border rounded text-sm"
             disabled={isSubmitting}
+            className="px-4 py-2 border border-gray-300 rounded-md text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-50"
           >
             Cancel
           </button>
-          <button 
+          <button
             type="submit"
-            className="px-4 py-2 bg-mdm-primary text-white rounded text-sm"
             disabled={isSubmitting}
+            className="px-4 py-2 bg-mdm-primary text-white rounded-md text-sm hover:bg-mdm-primary/90 disabled:opacity-50"
           >
             {isSubmitting ? 'Creating...' : 'Create Customer'}
           </button>
