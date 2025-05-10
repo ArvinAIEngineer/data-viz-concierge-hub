@@ -25,7 +25,7 @@ interface ChatAssistantProps {
   onClose: () => void;
 }
 
-const API_BASE_URL_CHAT = import.meta.env.VITE_CHAT_BACKEND_URL || "http://localhost:5200";
+const API_BASE_URL_CHAT = import.meta.env.VITE_CHAT_BACKEND_URL || "https://bakend-24ej.onrender.com";
 
 // Helper to format customer details for display
 const formatCustomerForDisplay = (customer: Customer, type: 'chat_list_item' | 'modal_full_details'): React.ReactNode => {
