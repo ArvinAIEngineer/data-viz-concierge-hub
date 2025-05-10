@@ -10,7 +10,7 @@ if (!supabaseUrl || !supabaseAnonKey) {
 }
 export const supabase = createClient(supabaseUrl as string, supabaseAnonKey as string);
 
-const API_BASE_URL = import.meta.env.VITE_CHAT_BACKEND_URL || "http://localhost:5200";
+const API_BASE_URL = import.meta.env.VITE_CHAT_BACKEND_URL || "https://bakend-24ej.onrender.com";
 
 export const getCustomers = async (query?: string): Promise<Customer[]> => {
   try {
